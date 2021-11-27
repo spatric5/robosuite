@@ -110,7 +110,7 @@ def gather_demonstrations_as_hdf5(directory, out_dir, env_info):
         env_info (str): JSON-encoded string containing environment information,
             including controller and robot info
     """
-
+    print("Saving HDF5 to", out_dir)
     hdf5_path = os.path.join(out_dir, "demo.hdf5")
     f = h5py.File(hdf5_path, "w")
 

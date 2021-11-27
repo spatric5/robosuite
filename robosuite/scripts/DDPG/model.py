@@ -101,4 +101,44 @@ class Actor(nn.Module):
 		return action
 
 
+class Estimator(nn.Module):
+	def __init__(self, state_dim, state_lim):
+		"""
+		:param state_dim: Dimension of input state (int)
+		:				  also used for output since it should be the same size
+		:return:
+		"""
+		super(Actor, self).__init__()
 
+		self.state_dim = state_dim
+		self.state_lim = state_lim
+
+		self.fc1 = nn.Linear(state_dim,256)
+		self.fc1.weight.data = fanin_init(self.fc1.weight.data.size())
+
+		self.fc2 = nn.Linear(256,128)
+		self.fc2.weight.data = fanin_init(self.fc2.weight.data.size())
+
+		self.fc3 = nn.Linear(128,64)
+		self.fc3.weight.data = fanin_init(self.fc3.weight.data.size())
+
+		self.fc4 = nn.Linear(64,state_dim)
+		self.fc4.weight.data.uniform_(-EPS,EPS)
+
+	def forward(self, state):
+		"""
+		returns policy function Pi(s) obtained from actor network
+		this function is a gaussian prob distribution for all actions
+		with mean lying in (-1,1) and sigma lying in (0,1)
+		The sampled action can , then later be rescaled
+		:param state: Input state (Torch Variable : [n,state_dim] )
+		:return: Output action (Torch Variable: [n,action_dim] )
+		"""
+		x = F.relu(self.fc1(state))
+		x = F.relu(self.fc2(x))
+		x = F.relu(self.fc3(x))
+		next_state_est = torch.tanh(self.fc4(x))
+
+		next_state_est = next_state_est * self.state_lim
+
+		return next_state_est
