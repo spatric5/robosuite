@@ -17,15 +17,15 @@ def buildTwoRobotEnvi():
     mujoco_robot = Panda()
     gripper = gripper_factory('PandaGripper')
     mujoco_robot.add_gripper(gripper)
-    mujoco_robot.set_base_xpos([3, 0, 0])
+    mujoco_robot.set_base_xpos([-0.7, 0, 0.6])
     world.merge(mujoco_robot)
 
     mujoco_robot2 = Panda(idn="robot2")
-    mujoco_robot2.set_base_xpos([1, 0, 0])
+    mujoco_robot2.set_base_xpos([0.7, 0, 0.6])
     world.merge(mujoco_robot2)
 
-    mujoco_arena = EmptyArena()
-    mujoco_arena.set_origin([2, 0, 0])
+    mujoco_arena = TableArena()
+    mujoco_arena.set_origin([0, 0, 0])
     world.merge(mujoco_arena)
 
     sphere = BallObject(
@@ -38,26 +38,19 @@ def buildTwoRobotEnvi():
 
     box = BoxObject(
         name="box",
-        size=[0.4,0.4,0.4],
+        size=[0.4,0.4,1.0],
         rgba=[0, 0.5, 0.5, 1]).get_obj()
-    box.set('pos', '1.0 1.0 1.0')
+    box.set('pos', '0 1.0 1.0')
     world.worldbody.append(box)
 
 
     cyl = CylinderObject(
         name="cyl",
-        size=[0.2,0.4],
+        size=[0.6,0.8],
         rgba=[0, 0.5, 0.5, 1]).get_obj()
-    cyl.set('pos', '3.0 0.5 1.0')
+    cyl.set('pos', '0.8 -0.8 0.85')
     world.worldbody.append(cyl)
 
-
-    cyl2 = CylinderObject(
-        name="cyl2",
-        size=[0.2,0.4],
-        rgba=[0, 0.5, 0.5, 1]).get_obj()
-    cyl2.set('pos', '3.0 -0.5 1.0')
-    world.worldbody.append(cyl2)
 
     model = world.get_model(mode="mujoco_py")
     
