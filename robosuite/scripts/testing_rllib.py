@@ -182,6 +182,9 @@ if __name__ == "__main__":
         # use fixed learning rate instead of grid search (needs tune)
         ppo_config["lr"] = 1e-3
         trainer = ppo.PPOTrainer(config=ppo_config, env=SimpleCorridor)
+        policy = trainer.get_policy()
+        #print(policy.model.base_model.summary())
+
         # run manual training loop and print results after each iteration
         for _ in range(args.stop_iters):
             result = trainer.train()
