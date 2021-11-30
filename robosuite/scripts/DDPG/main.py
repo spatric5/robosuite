@@ -14,25 +14,31 @@ import train_v2
 import buffer
 import robosuite as suite
 from robosuite.wrappers import GymWrapper
+from robosuite import load_controller_config
 
 #env = gym.make('BipedalWalker-v2') 'Pendulum-v1'
 
-MAX_EPISODES = 1000
-MAX_STEPS = 1000
+MAX_EPISODES = 4000
+MAX_STEPS = 150
 MAX_BUFFER = 1000000
 MAX_TOTAL_REWARD = 300
 EPS_PER_SAVE = 25
-ENV_STRING = 'robosuite'
-TRAINING = True
-RENDER_ENV = False
+ENV_STRING = 'robosuite-v2'
+CTRL_STRING = 'OSC_POSE'
+TRAINING = False
+RENDER_ENV = True
 RESET_AGENT = False
 
 if (ENV_STRING == 'FetchPickAndPlace-v1') or (ENV_STRING == 'FetchReach-v1'):
+	# For the fetch environment, the observation is the gripper position (XYZ, Q1-4) and the desired goal (XYZ) - shape(13,)
+	# the action space is the change in XYZ position and closing/opening the gripper - shape (4,)
 	env = gym.make(ENV_STRING,reward_type='dense')
 	S_DIM = env.observation_space['observation'].shape[0]+env.observation_space['desired_goal'].shape[0]
 	A_DIM = env.action_space.shape[0]
 	A_MAX = env.action_space.high[0]
-elif ENV_STRING == 'robosuite':
+elif (ENV_STRING == 'robosuite') or (ENV_STRING == 'robosuite-v2'):
+	# For the robosuite environment, the observation are the joint angles (J1-6) of the robot and the desired goal (XYZ) - shape(9,)
+	config = load_controller_config(default_controller=CTRL_STRING)
 	env =suite.make(
             "Lift",
             robots="Sawyer",                # use Sawyer robot
@@ -41,9 +47,10 @@ elif ENV_STRING == 'robosuite':
             has_renderer=RENDER_ENV,        # make sure we can render to the screen
             reward_shaping=True,            # use dense rewards
             control_freq=20,                # control should happen fast enough so that simulation looks smooth
+			controller_configs = config,	# Controller config
         )
 	S_DIM = 3+7
-	A_DIM = 8
+	A_DIM = 7
 	A_MAX = 1
 else:
 	env = gym.make(ENV_STRING)
@@ -56,10 +63,16 @@ print(' Action Dimensions :- ', A_DIM)
 print(' Action Max :- ', A_MAX)
 
 ram = buffer.MemoryBuffer(MAX_BUFFER)
-trainer = train.Trainer(S_DIM, A_DIM, A_MAX, ram)
-if
-#offset = trainer.load_models(1000,env_string=ENV_STRING)
-offset = 0
+if ENV_STRING == 'robosuite-v2':
+	trainer = train_v2.Trainer_v2(S_DIM,1.0,A_DIM,A_MAX,ram,1)
+else:
+	trainer = train.Trainer(S_DIM, A_DIM, A_MAX, ram)
+
+if RESET_AGENT:
+	offset = 0
+else:
+	offset = trainer.load_models(-1,env_string=ENV_STRING)
+
 for _ep in range(MAX_EPISODES):
 	observation = env.reset()
 	print('EPISODE :- ', _ep)
@@ -71,7 +84,7 @@ for _ep in range(MAX_EPISODES):
 		if (ENV_STRING == 'FetchPickAndPlace-v1') or (ENV_STRING == 'FetchReach-v1'):
 			#state=np.float32(observation['observation'])
 			state = np.concatenate((observation['observation'], observation['desired_goal']),dtype=np.float32)
-		elif ENV_STRING == 'robosuite':
+		elif (ENV_STRING == 'robosuite') or (ENV_STRING == 'robosuite-v2'):
 			joint_c = observation['robot0_joint_pos_cos']
 			joint_s = observation['robot0_joint_pos_sin']
 			#print('Joint Cosines, ', joint_c)
@@ -81,7 +94,7 @@ for _ep in range(MAX_EPISODES):
 		else:
 			state = np.float32(observation)
 
-		if TRAINING == True:
+		if (TRAINING == True):
 			action = trainer.get_exploration_action(state)
 		else:
 			action = trainer.get_exploitation_action(state)
@@ -93,7 +106,7 @@ for _ep in range(MAX_EPISODES):
 		# 	# get action based on observation, use exploration policy here
 		# 	action = trainer.get_exploration_action(state)
 
-		if ENV_STRING == 'robosuite':
+		if (ENV_STRING == 'robosuite') or (ENV_STRING == 'robosuite-v2'):
 			new_observation, reward, done, info = env.step(action)
 		else:
 			new_observation, reward, done, info = env.step(action)
@@ -108,7 +121,7 @@ for _ep in range(MAX_EPISODES):
 			if (ENV_STRING == 'FetchPickAndPlace-v1') or (ENV_STRING == 'FetchReach-v1'):
 				#new_state = np.float32(new_observation['observation'])
 				new_state = np.concatenate((new_observation['observation'], new_observation['desired_goal']),dtype=np.float32)
-			elif ENV_STRING == 'robosuite':
+			elif (ENV_STRING == 'robosuite') or (ENV_STRING == 'robosuite-v2'):
 				joint_c = new_observation['robot0_joint_pos_cos']
 				joint_s = new_observation['robot0_joint_pos_sin']
 				#print('Joint Cosines, ', joint_c)

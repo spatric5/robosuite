@@ -1,5 +1,8 @@
 # Saved Models
-./robosuite/scripts/DDPG/Models/
+robosuite/scripts/DDPG/Models/
+
+# Demonstration files
+robosuite/models/assets/demonstrations/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

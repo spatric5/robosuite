@@ -13,7 +13,7 @@ from os import listdir
 from os.path import isfile, join
 
 BATCH_SIZE = 128
-LEARNING_RATE = 0.0001
+LEARNING_RATE = 0.001
 GAMMA = 0.99
 TAU = 0.001
 
@@ -32,25 +32,34 @@ class Trainer_v2:
 		self.state_lim = state_lim
 		self.action_dim = action_dim
 		self.action_lim = action_lim
+		self.num_agents = num_agents
 		self.ram = ram
 		self.iter = 0
 		self.noise = utils.OrnsteinUhlenbeckActionNoise(self.action_dim)
 
-		self.actor = model.Actor(self.state_dim, self.action_dim, self.action_lim)
-		self.target_actor = model.Actor(self.state_dim, self.action_dim, self.action_lim)
+		self.actor = model.Actor(self.state_dim*self.num_agents, self.action_dim*self.num_agents, self.action_lim)
+		self.target_actor = model.Actor(self.state_dim, self.action_dim*self.num_agents, self.action_lim)
 		self.actor_optimizer = torch.optim.Adam(self.actor.parameters(),LEARNING_RATE)
 
-		self.critic = model.Critic(self.state_dim, self.action_dim)
-		self.target_critic = model.Critic(self.state_dim, self.action_dim)
+		self.critic = model.Critic(self.state_dim*self.num_agents, self.action_dim*self.num_agents)
+		self.target_critic = model.Critic(self.state_dim*self.num_agents, self.action_dim*self.num_agents)
 		self.critic_optimizer = torch.optim.Adam(self.critic.parameters(),LEARNING_RATE)
 
-		self.estimator = model.Estimator(self.state_dim*num_agents,self.state_lim)
-		self.target_estimator = model.Estimator(self.state_dim*num_agents,self.state_lim)
-		self.estimator_optimizer = torch.optim.Adam(self.estimator.parameters(),LEARNING_RATE)
+		# Estimator for individual actions of each robot
+		for i in range(num_agents):
+			self.estimator[i] = model.Estimator(self.state_dim,self.state_lim)
+			self.target_estimator[i] = model.Estimator(self.state_dim,self.state_lim)
+			self.estimator_optimizer[i] = torch.optim.Adam(self.estimator[i].parameters(),LEARNING_RATE)
+			utils.hard_update(self.target_estimator[i], self.estimator[i])
+		
+		# Estimator for combined actions of all robots
+		self.joint_estimator = model.Joint_Estimator(self.state_dim*num_agents,self.state_lim)
+		self.target_joint_estimator = model.Joint_Estimator(self.state_dim*num_agents,self.state_lim)
+		self.joint_estimator_optimizer = torch.optim.Adam(self.joint_estimator.parameters(),LEARNING_RATE)
 
 		utils.hard_update(self.target_actor, self.actor)
 		utils.hard_update(self.target_critic, self.critic)
-		utils.hard_update(self.target_estimator, self.estimator)
+		utils.hard_update(self.target_joint_estimator, self.joint_estimator)
 
 	def get_exploitation_action(self, state):
 		"""

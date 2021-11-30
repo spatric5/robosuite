@@ -108,7 +108,7 @@ class Estimator(nn.Module):
 		:				  also used for output since it should be the same size
 		:return:
 		"""
-		super(Actor, self).__init__()
+		super(Estimator, self).__init__()
 
 		self.state_dim = state_dim
 		self.state_lim = state_lim
