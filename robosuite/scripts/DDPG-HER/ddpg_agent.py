@@ -29,15 +29,22 @@ class ddpg_agent:
             if not os.path.exists(self.model_path):
                 saved_model_flag = False
                 os.mkdir(self.model_path)
+        # create the normalizer
+        self.o_norm = normalizer(size=env_params['obs'], default_clip_range=self.args.clip_range)
+        self.g_norm = normalizer(size=env_params['goal'], default_clip_range=self.args.clip_range)
         # create the network
         self.actor_network = actor(env_params)
         self.critic_network = critic(env_params)
         if saved_model_flag:
             print('Loading saved model:', self.model_path + '/model.pt')
-            _, _, _, _, model, model_critic = torch.load(self.model_path + '/model.pt', map_location=lambda storage, loc: storage)
+            o_mean, o_std, g_mean, g_std, model, model_critic = torch.load(self.model_path + '/model.pt', map_location=lambda storage, loc: storage)
             self.actor_network.load_state_dict(model)
             self.critic_network.load_state_dict(model_critic)
             #print(self.critic_network.state_dict()['q_out.bias'])
+            self.o_norm.mean = o_mean
+            self.o_norm.std = o_std
+            self.g_norm.mean = g_mean
+            self.g_norm.std = g_std
         # sync the networks across the cpus
         sync_networks(self.actor_network)
         sync_networks(self.critic_network)
@@ -60,9 +67,6 @@ class ddpg_agent:
         self.her_module = her_sampler(self.args.replay_strategy, self.args.replay_k, self.env.compute_reward)
         # create the replay buffer
         self.buffer = replay_buffer(self.env_params, self.args.buffer_size, self.her_module.sample_her_transitions)
-        # create the normalizer
-        self.o_norm = normalizer(size=env_params['obs'], default_clip_range=self.args.clip_range)
-        self.g_norm = normalizer(size=env_params['goal'], default_clip_range=self.args.clip_range)
 
     def learn(self):
         """
@@ -70,6 +74,8 @@ class ddpg_agent:
 
         """
         success_rate_list = np.zeros(self.args.n_epochs)
+        success_rate = self._eval_agent()
+        print('Initial success rate:', success_rate)
         #print(self.critic_network.state_dict()['q_out.bias'])
         # start to collect samples
         for epoch in range(self.args.n_epochs):
@@ -255,6 +261,7 @@ class ddpg_agent:
 
     # do the evaluation
     def _eval_agent(self):
+        self.actor_network.eval()
         total_success_rate = []
         for _ in range(self.args.n_test_rollouts):
             per_success_rate = []
@@ -275,4 +282,5 @@ class ddpg_agent:
         total_success_rate = np.array(total_success_rate)
         local_success_rate = np.mean(total_success_rate[:, -1])
         global_success_rate = MPI.COMM_WORLD.allreduce(local_success_rate, op=MPI.SUM)
+        self.actor_network.train()
         return global_success_rate / MPI.COMM_WORLD.Get_size()
