@@ -263,7 +263,7 @@ class Lift(SingleArmEnv):
     def compute_reward(self, achieved_goal, goal, info):
         # Compute distance between goal and the achieved goal.
         d = -1.0*np.linalg.norm(achieved_goal- goal,axis=-1)
-        return -d
+        return d
 
     def _load_model(self):
         """
