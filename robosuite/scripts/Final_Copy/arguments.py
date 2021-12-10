@@ -8,7 +8,7 @@ Here are the param for the training
 def get_args():
 	parser = argparse.ArgumentParser()
 	# the environment setting
-	#parser.add_argument('--env-name', type=str, default='FetchReach-v1', help='the environment name')
+	#parser.add_argument('--env-name', type=str, default='FetchPickAndPlace-v1', help='the environment name')
 	parser.add_argument('--env-name', type=str, default='robosuite', help='the environment name')
 	parser.add_argument('--n-epochs', type=int, default=1, help='the number of epochs to train the agent')
 	parser.add_argument('--n-cycles', type=int, default=2, help='the times to collect samples per epoch')
@@ -41,6 +41,8 @@ def get_args():
 						default=150,help = "Maximum Number of Time Steps per Episode")
 	parser.add_argument("--controller",dest='CTRL_STRING',action='store',
 						default='OSC_POSE',help = "Controller String: OSC_POSE, OSC_POSITION, JOINT_POSITION ...")
+	parser.add_argument("--robosuite-string",dest='robosuite_string',action='store',
+						default='TwoArmLift',help = "Controller String: OSC_POSE, OSC_POSITION, JOINT_POSITION ...")
 	parser.add_argument("--Render",dest='RENDER_ENV',action='store_true',
 						default=False,help='Render robosuite environment')
 	parser.add_argument("--Reset",dest='RESET_AGENT',action='store_true',

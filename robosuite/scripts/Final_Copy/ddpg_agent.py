@@ -1,3 +1,4 @@
+import robosuite
 import torch
 import os
 from datetime import datetime
@@ -8,6 +9,7 @@ from utils import sync_networks, sync_grads
 from replay_buffer import replay_buffer
 from normalizer import normalizer
 from her import her_sampler
+from tqdm import tqdm
 
 """
 ddpg with HER (MPI-version)
@@ -18,9 +20,32 @@ class ddpg_agent:
 		self.args = args
 		self.env = env
 		self.env_params = env_params
+		# create the dict for store the model
+		if MPI.COMM_WORLD.Get_rank() == 0:
+			if not os.path.exists(self.args.save_dir):
+				os.mkdir(self.args.save_dir)
+
+			if args.env_name == 'robosuite':
+				self.model_path = os.path.join(self.args.save_dir, self.args.env_name)
+				if not os.path.exists(self.model_path):
+					os.mkdir(self.model_path)
+				self.model_path = os.path.join(self.model_path, self.args.robosuite_string)
+				if not os.path.exists(self.model_path):
+					os.mkdir(self.model_path)
+			else:
+				# path to save the model
+				self.model_path = os.path.join(self.args.save_dir, self.args.env_name)
+				if not os.path.exists(self.model_path):
+					os.mkdir(self.model_path)
+		
 		# create the network
 		self.actor_network = actor(env_params)
 		self.critic_network = critic(env_params)
+		if False:
+			print('Loading saved model:', self.model_path + '/model.pt')
+			_, _, _, _, model, model_critic = torch.load(self.model_path + '/model.pt', map_location=lambda storage, loc: storage)
+			self.actor_network.load_state_dict(model)
+			self.critic_network.load_state_dict(model_critic)
 		# sync the networks across the cpus
 		sync_networks(self.actor_network)
 		sync_networks(self.critic_network)
@@ -49,14 +74,6 @@ class ddpg_agent:
 		# create the normalizer
 		self.o_norm = normalizer(size=env_params['obs'], default_clip_range=self.args.clip_range)
 		self.g_norm = normalizer(size=env_params['goal'], default_clip_range=self.args.clip_range)
-		# create the dict for store the model
-		if MPI.COMM_WORLD.Get_rank() == 0:
-			if not os.path.exists(self.args.save_dir):
-				os.mkdir(self.args.save_dir)
-			# path to save the model
-			self.model_path = os.path.join(self.args.save_dir, self.args.env_name)
-			if not os.path.exists(self.model_path):
-				os.mkdir(self.model_path)
 
 	def learn(self):
 		"""
@@ -76,9 +93,17 @@ class ddpg_agent:
 						joint_c = observation['robot0_joint_pos_cos']
 						joint_s = observation['robot0_joint_pos_sin']
 						joint_angs = np.arctan2(joint_s,joint_c)
-						obs = joint_angs
-						ag = observation['robot0_eef_pos']
-						g = observation['cube_pos']
+						obs = np.concatenate((joint_angs,observation['robot0_joint_vel'],observation['robot0_eef_pos'],observation['robot0_eef_quat']))
+						if self.args.robosuite_string == 'TwoArmLift':
+							joint_c = observation['robot1_joint_pos_cos']
+							joint_s = observation['robot1_joint_pos_sin']
+							joint_angs = np.arctan2(joint_s,joint_c)
+							obs = np.concatenate((obs,joint_angs,observation['robot1_joint_vel'],observation['robot1_eef_pos'],observation['robot1_eef_quat']))
+							ag = np.concatenate((observation['robot0_eef_pos'],observation['robot1_eef_pos']))
+							g = np.concatenate((observation['handle0_xpos'],observation['handle1_xpos']))
+						else:
+							ag = observation['robot0_eef_pos']
+							g = observation['cube_pos']
 					else:
 						obs = observation['observation']
 						ag = observation['achieved_goal']
@@ -90,14 +115,21 @@ class ddpg_agent:
 							pi = self.actor_network(input_tensor)
 							action = self._select_actions(pi)
 						# feed the actions into the environment
-						observation_new, _, _, info = self.env.step(action)
+						observation_new, _, done, info = self.env.step(action)
 
 						if self.args.env_name == 'robosuite':
 							joint_c = observation_new['robot0_joint_pos_cos']
 							joint_s = observation_new['robot0_joint_pos_sin']
 							joint_angs = np.arctan2(joint_s,joint_c)
-							obs_new = joint_angs
-							ag_new = observation_new['robot0_eef_pos']
+							obs_new = np.concatenate((joint_angs,observation_new['robot0_joint_vel'],observation_new['robot0_eef_pos'],observation_new['robot0_eef_quat']))
+							if self.args.robosuite_string == 'TwoArmLift':
+								joint_c = observation_new['robot1_joint_pos_cos']
+								joint_s = observation_new['robot1_joint_pos_sin']
+								joint_angs = np.arctan2(joint_s,joint_c)
+								obs_new = np.concatenate((obs_new,joint_angs,observation_new['robot1_joint_vel'],observation_new['robot1_eef_pos'],observation_new['robot1_eef_quat']))
+								ag_new = np.concatenate((observation_new['robot0_eef_pos'],observation_new['robot1_eef_pos']))
+							else:
+								ag_new = observation_new['robot0_eef_pos']
 						else: 
 							obs_new = observation_new['observation']
 							ag_new = observation_new['achieved_goal']
@@ -133,7 +165,7 @@ class ddpg_agent:
 			success_rate = self._eval_agent()
 			if MPI.COMM_WORLD.Get_rank() == 0:
 				print('[{}] epoch is: {}, eval success rate is: {:.3f}'.format(datetime.now(), epoch, success_rate))
-				torch.save([self.o_norm.mean, self.o_norm.std, self.g_norm.mean, self.g_norm.std, self.actor_network.state_dict()], \
+				torch.save([self.o_norm.mean, self.o_norm.std, self.g_norm.mean, self.g_norm.std, self.actor_network.state_dict(), self.critic_network.state_dict()], \
 							self.model_path + '/model.pt')
 
 	# pre_process the inputs
@@ -261,9 +293,15 @@ class ddpg_agent:
 				joint_c = observation['robot0_joint_pos_cos']
 				joint_s = observation['robot0_joint_pos_sin']
 				joint_angs = np.arctan2(joint_s,joint_c)
-				obs = joint_angs
-				ag = observation['robot0_eef_pos']
-				g = observation['cube_pos']
+				obs = np.concatenate((joint_angs,observation['robot0_joint_vel'],observation['robot0_eef_pos'],observation['robot0_eef_quat']))
+				if self.args.robosuite_string == 'TwoArmLift':
+					joint_c = observation['robot1_joint_pos_cos']
+					joint_s = observation['robot1_joint_pos_sin']
+					joint_angs = np.arctan2(joint_s,joint_c)
+					obs = np.concatenate((obs,joint_angs,observation['robot1_joint_vel'],observation['robot1_eef_pos'],observation['robot1_eef_quat']))
+					g = np.concatenate((observation['handle0_xpos'],observation['handle1_xpos']))
+				else:
+					g = observation['cube_pos']
 			else:
 				obs = observation['observation']
 				g = observation['desired_goal']
@@ -278,8 +316,15 @@ class ddpg_agent:
 					joint_c = observation_new['robot0_joint_pos_cos']
 					joint_s = observation_new['robot0_joint_pos_sin']
 					joint_angs = np.arctan2(joint_s,joint_c)
-					obs = joint_angs
-					g = observation_new['cube_pos']
+					obs = np.concatenate((joint_angs,observation_new['robot0_joint_vel'],observation_new['robot0_eef_pos'],observation_new['robot0_eef_quat']))
+					if self.args.robosuite_string == 'TwoArmLift':
+						joint_c = observation_new['robot1_joint_pos_cos']
+						joint_s = observation_new['robot1_joint_pos_sin']
+						joint_angs = np.arctan2(joint_s,joint_c)
+						obs = np.concatenate((obs,joint_angs,observation_new['robot1_joint_vel'],observation_new['robot1_eef_pos'],observation_new['robot1_eef_quat']))
+						g = np.concatenate((observation_new['handle0_xpos'],observation_new['handle1_xpos']))
+					else:
+						g = observation_new['cube_pos']
 					per_success_rate.append(self.env._check_success())
 				else:
 					obs = observation_new['observation']

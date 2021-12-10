@@ -246,7 +246,8 @@ class Lift(SingleArmEnv):
             cube_pos = self.sim.data.body_xpos[self.cube_body_id]
             gripper_site_pos = self.sim.data.site_xpos[self.robots[0].eef_site_id]
             dist = np.linalg.norm(gripper_site_pos - cube_pos)
-            reaching_reward = 1 - np.tanh(10.0 * dist)
+            #reaching_reward = 1 - np.tanh(10.0 * dist)
+            reaching_reward = -1.0*dist
             reward += reaching_reward
 
             # grasping reward
@@ -258,6 +259,11 @@ class Lift(SingleArmEnv):
             reward *= self.reward_scale / 2.25
 
         return reward
+
+    def compute_reward(self, achieved_goal, goal, info):
+        # Compute distance between goal and the achieved goal.
+        d = -1.0*np.linalg.norm(achieved_goal- goal,axis=-1)
+        return -d
 
     def _load_model(self):
         """
@@ -311,8 +317,8 @@ class Lift(SingleArmEnv):
             self.placement_initializer = UniformRandomSampler(
                 name="ObjectSampler",
                 mujoco_objects=self.cube,
-                x_range=[-0.03, 0.03],
-                y_range=[-0.03, 0.03],
+                x_range=[-0.25, 0.25],
+                y_range=[-0.25, 0.25],
                 rotation=None,
                 ensure_object_boundary_in_range=False,
                 ensure_valid_placement=True,

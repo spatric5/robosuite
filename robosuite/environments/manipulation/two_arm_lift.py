@@ -283,19 +283,24 @@ class TwoArmLift(TwoArmEnv):
             if self._check_grasp(gripper=g0, object_geoms=self.pot.handle0_geoms):
                 reward += 0.25
             # Reaching reward
-            reward += 0.5 * (1 - np.tanh(10.0 * _g0h_dist))
+            reward += -0.5 * _g0h_dist
 
             # Grasping reward
             if self._check_grasp(gripper=g1, object_geoms=self.pot.handle1_geoms):
                 reward += 0.25
             # Reaching reward
-            reward += 0.5 * (1 - np.tanh(10.0 * _g1h_dist))
+            reward += -0.5 * _g1h_dist
 
         if self.reward_scale is not None:
             reward *= self.reward_scale / 3.0
 
         return reward
 
+    def compute_reward(self, achieved_goal, goal, info):
+        # Compute distance between goal and the achieved goal.
+        d = np.linalg.norm(achieved_goal- goal,axis=-1)
+        return -d
+        
     def _load_model(self):
         """
         Loads an xml model, puts it in self.model
